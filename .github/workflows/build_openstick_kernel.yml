@@ -3,6 +3,13 @@ name: Build Debian for Openstick
 on:
   workflow_dispatch:  # 手动触发
     inputs:
+      openstick_board:
+        description: 'Board version'
+        type: choice
+        default: ufi001c
+        options:
+          - ufi001c
+          - uz801
       debian_version:
         description: 'debian version (support 12 or 13)'
         required: true
@@ -29,6 +36,10 @@ on:
         description: 'Config profile (defconfig/custom)'
         required: true
         default: 'custom'
+      config_profile_name:
+        description: 'Config profile name'
+        required: false
+        default: 'extra'
       ssh:
         description: 'SSH connection to Actions'
         required: false
@@ -107,7 +118,7 @@ jobs:
             ;;
           custom)
             make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 msm8916_defconfig
-            scripts/kconfig/merge_config.sh -m -Q .config  $GITHUB_WORKSPACE/workspace/.config # 使用仓库中的自定义配置
+            scripts/kconfig/merge_config.sh -m -Q .config  $GITHUB_WORKSPACE/workspace/configs/${{ inputs.config_profile_name }}.config # 使用仓库中的自定义配置
             make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 olddefconfig
             ;;
         esac
@@ -145,7 +156,13 @@ jobs:
         
         # 重命名输出文件
         mkdir -p $GITHUB_WORKSPACE/artifacts/
-        cat arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/msm8916-thwc-ufi001c.dtb > $GITHUB_WORKSPACE/artifacts/kernel-dtb
+        if [[ "${{ inputs.openstick_board }}" == "ufi001c" ]]; then
+            cat arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/msm8916-thwc-ufi001c.dtb > $GITHUB_WORKSPACE/artifacts/kernel-dtb
+        elif [[ "${{ inputs.openstick_board }}" == "uz801" ]]; then
+            cat arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dtb > $GITHUB_WORKSPACE/artifacts/kernel-dtb
+        else
+            echo "Could not supported the device! Skipped."
+        fi
         mv ../linux-*.deb ../artifacts/
         echo "status=success" >>$GITHUB_OUTPUT
 
@@ -211,11 +228,16 @@ jobs:
         sudo cp /usr/bin/qemu-aarch64-static rootfs/usr/bin/
         sudo chroot rootfs /debootstrap/debootstrap --second-stage
         echo "root:1" | sudo chroot rootfs chpasswd
-        sudo chroot rootfs useradd -m -s /bin/bash klipper
-        echo "klipper:1" | sudo chroot rootfs chpasswd
-        sudo chroot rootfs usermod -aG sudo klipper
         sudo rm rootfs/usr/bin/qemu-aarch64-static
-        sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/firmware rootfs/usr/lib/
+
+        if [[ "${{ inputs.openstick_board }}" == "ufi001c" ]]; then
+            sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/firmware/ufi001c rootfs/usr/lib/firmware
+        elif [[ "${{ inputs.openstick_board }}" == "uz801" ]]; then
+            sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/firmware/uz801 rootfs/usr/lib/firmware
+        else
+            echo "Could not supported the device! Skipped."
+        fi
+
         sudo chmod -R 644 rootfs/usr/lib/firmware
         sudo cp -a --update=none $GITHUB_WORKSPACE/workspace/files/system/* rootfs/etc/systemd/system
         version="${{ steps.configure.outputs.kernel_ver }}"
@@ -335,14 +357,13 @@ jobs:
         path: |
           artifacts/*
           linux-src/arch/arm64/boot/Image
-          linux-src/arch/arm64/boot/dts/qcom/msm8916-thwc-ufi001c.dtb
           linux-src/defconfig
 
     - name: Generate release tag
       id: tag
       if: steps.rootfs.outputs.status == 'success' && steps.bootimg.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        echo "release_tag=openstick-${{ inputs.debian_version }}-kernel-${{ steps.configure.outputs.kernel_ver }}-${{ inputs.rootfs_type }}" >> $GITHUB_OUTPUT
+        echo "release_tag=openstick-${{ inputs.debian_version }}-kernel-${{ steps.configure.outputs.kernel_ver }}-${{ inputs.rootfs_type }}-${{ inputs.openstick_board }}" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
