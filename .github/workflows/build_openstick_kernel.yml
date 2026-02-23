@@ -33,11 +33,15 @@ on:
         required: true
         default: 'false'
       config_profile:
-        description: 'Config profile (defconfig/custom)'
+        description: 'Config profile'
         required: true
-        default: 'custom'
+        type: choice
+        default: 'defconfig'
+        options:
+          - defconfig
+          - custom
       config_profile_name:
-        description: 'Config profile name'
+        description: 'Config profile name (like extra.config)'
         required: false
         default: 'extra'
       ssh:
