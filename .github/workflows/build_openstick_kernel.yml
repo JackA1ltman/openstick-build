@@ -221,6 +221,7 @@ jobs:
         else
           PKGS="$PKGS bsdmainutils ifupdown isc-dhcp-client isc-dhcp-common netfilter-persistent rmtfs runit-helper util-linux-extra usrmerge"
         fi
+        PKGS="$PKGS iwd"
         if [ "$ver" = "trixie" ]; then
           PKGS="$PKGS network-manager-iwd"
         fi
