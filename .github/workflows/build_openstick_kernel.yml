@@ -36,7 +36,7 @@ on:
         description: 'Config profile'
         required: true
         type: choice
-        default: 'defconfig'
+        default: 'custom'
         options:
           - defconfig
           - custom
