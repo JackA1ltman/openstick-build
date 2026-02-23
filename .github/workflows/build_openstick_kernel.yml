@@ -51,7 +51,7 @@ on:
       upload_release:
         description: 'Upload firmware to release'
         required: false
-        default: 'false'
+        default: 'true'
       localversion:
         description: 'Set your localversion(e.g. -openstick)'
         required: false
