@@ -23,14 +23,15 @@ on:
         description: 'Kernel version (e.g. v6.6)'
         required: true
         type: choice
-        default: 'v6.12.1-msm8916'
+        default: 'wip/msm8916/6.19'
         options:
+          - 'wip/msm8916/6.19'
           - 'v6.12.1-msm8916'
           - 'v6.6-msm8916'
       update_last_kernel_patch:
         description: 'Do you want to update the kernel to the latest patch?'
         required: true
-        default: 'true'
+        default: 'false'
       config_profile:
         description: 'Config profile'
         required: true
