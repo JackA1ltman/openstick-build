@@ -9,7 +9,6 @@ on:
         type: choice
         default: trixie
         options:
-          - bookworm
           - trixie
           - noble
           - plucky
@@ -17,8 +16,9 @@ on:
         description: 'Kernel version (e.g. v6.6)'
         required: true
         type: choice
-        default: 'v6.12.1-msm8916'
+        default: 'wip/msm8916/6.19'
         options:
+          - 'wip/msm8916/6.19'
           - 'v6.12.1-msm8916'
           - 'v6.6-msm8916'
       update_last_kernel_patch:
@@ -40,7 +40,7 @@ on:
       localversion:
         description: 'Set your localversion(e.g. -openstick)'
         required: false
-        default: '-openstick'
+        default: '-jackaltman'
       rootfs_type:
         description: 'Set rootfs type(e.g. ext4/btrfs)'
         type: choice
@@ -184,7 +184,7 @@ jobs:
         fi
 
         ver="${{ inputs.debian_version }}"
-        if [ "$ver" = "trixie" ] || [ "$ver" = "bookworm" ]; then
+        if [ "$ver" = "trixie" ]; then
           OSTYPE=debian
         elif [ "$ver" = "noble" ] || [ "$ver" = "plucky" ]; then
           OSTYPE=ubuntu
@@ -199,11 +199,6 @@ jobs:
           PKGS="$PKGS bsdextrautils systemd-resolved"
         else
           PKGS="$PKGS bsdmainutils ifupdown isc-dhcp-client isc-dhcp-common netfilter-persistent rmtfs runit-helper util-linux-extra usrmerge"
-        fi
-        if [ "$ver" = "bookworm" ]; then
-          PKGS="$PKGS wpasupplicant"
-        else
-          PKGS="$PKGS iwd"
         fi
         if [ "$ver" = "trixie" ]; then
           PKGS="$PKGS network-manager-iwd"
@@ -271,11 +266,6 @@ jobs:
         if [ "$ver" = "trixie" ]; then
           sudo rm -f rootfs/etc/profile.d/mobile-tweaks-mali.sh
           sudo chroot rootfs /bin/bash -c "apt-mark hold mobile-tweaks-common"
-        fi
-        if [ "$ver" != "bookworm" ]; then
-          sudo chroot rootfs /bin/bash -c "systemctl enable iwd"
-          sudo chroot rootfs /bin/bash -c "echo '[device]' >> /etc/NetworkManager/NetworkManager.conf"
-          sudo chroot rootfs /bin/bash -c "echo 'wifi.backend=iwd' >> /etc/NetworkManager/NetworkManager.conf"
         fi
         sudo sed -i 's/^#SIZE=[0-9]\+/SIZE=512/' rootfs/etc/default/zramswap
         sudo rm rootfs/etc/ssh/ssh_host_*
