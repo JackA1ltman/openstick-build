@@ -204,8 +204,8 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y qemu-user-static binfmt-support
-        if [[ -f $GITHUB_WORKSPACE/workspace/packages.txt ]]; then
-          PKGS=$(grep -vE '^\s*#' $GITHUB_WORKSPACE/workspace/packages.txt | tr '\n' ',' | sed 's/,$//')
+        if [[ -f $GITHUB_WORKSPACE/workspace/packages_debian.txt ]]; then
+          PKGS=$(grep -vE '^\s*#' $GITHUB_WORKSPACE/workspace/packages_debian.txt | tr '\n' ',' | sed 's/,$//')
           echo "📦 将安装的额外包: $PKGS"
         else
           echo "⚠️ 未找到 $PKG_LIST_FILE，跳过 --include"
