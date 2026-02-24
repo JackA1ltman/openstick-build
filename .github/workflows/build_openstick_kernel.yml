@@ -387,6 +387,12 @@ jobs:
         zip -r $GITHUB_WORKSPACE/flash_tools.zip $GITHUB_WORKSPACE/workspace/flashtools
         echo "status=success" >>$GITHUB_OUTPUT
 
+        if [[ "${{ inputs.modem_enable }}" == "true" ]]; then
+            echo "modem_status=modem_enabled" >>$GITHUB_ENV
+        else
+            echo "modem_status=no_modem" >>$GITHUB_ENV
+        fi
+
     # 10. 上传制品
     - name: Upload Artifacts
       if: steps.kernel.outputs.status == 'success' && !cancelled()
@@ -402,7 +408,7 @@ jobs:
       id: tag
       if: steps.rootfs.outputs.status == 'success' && steps.bootimg.outputs.status == 'success' && steps.flash_tools.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        echo "release_tag=openstick-${{ inputs.debian_version }}-kernel-${{ steps.configure.outputs.kernel_ver }}-${{ inputs.rootfs_type }}-${{ inputs.openstick_board }}" >> $GITHUB_OUTPUT
+        echo "release_tag=openstick-${{ inputs.debian_version }}-kernel-${{ steps.configure.outputs.kernel_ver }}-${{ inputs.rootfs_type }}-${{ env.modem_status }}-${{ inputs.openstick_board }}" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
