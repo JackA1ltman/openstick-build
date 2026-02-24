@@ -40,6 +40,11 @@ on:
         options:
           - defconfig
           - custom
+      modem_enable:
+        description: 'Do you want to enable modem functions (4G LTE and SMS) ?'
+        required: true
+        type: boolean
+        default: 'false'
       config_profile_name:
         description: 'Config profile name (like extra.config)'
         required: false
@@ -84,7 +89,7 @@ jobs:
           gcc-14 g++-14 dpkg-dev kmod cpio rsync u-boot-tools \
           debhelper libelf-dev libssl-dev coreutils \
           android-sdk-libsparse-utils wget gcc-14-aarch64-linux-gnu \
-          curl libdw-dev
+          curl libdw-dev zip
           wget http://ftp.debian.org/debian/pool/main/a/android-platform-tools/mkbootimg_34.0.5-12_all.deb
           sudo dpkg -i mkbootimg_34.0.5-12_all.deb
           wget http://ftp.debian.org/debian/pool/main/d/debootstrap/debootstrap_1.0.141_all.deb
@@ -257,6 +262,9 @@ jobs:
           sudo cp -a $GITHUB_WORKSPACE/workspace/files/dhcp.conf rootfs/etc/dnsmasq.d/dhcp.conf
         fi
         sudo cp $GITHUB_WORKSPACE/workspace/files/*.nmconnection rootfs/etc/NetworkManager/system-connections
+        if [[ "${{ inputs.modem_enable }}" == "false" ]]; then
+            sudo rm rootfs/etc/NetworkManager/system-connections/lte.nmconnection
+        fi
         sudo chmod 0600 rootfs/etc/NetworkManager/system-connections/*
         sudo mount --bind /proc rootfs/proc 
         sudo mount --bind /dev rootfs/dev 
@@ -288,7 +296,11 @@ jobs:
           sudo curl -o rootfs/etc/apt/trusted.gpg.d/mobian.gpg https://salsa.debian.org/Mobian-team/mobian-keyring/-/raw/master/mobian-archive-keyring.gpg
           sudo chroot rootfs /bin/bash -c "echo 'deb http://repo.mobian-project.org/ ${{ inputs.debian_version }} main non-free-firmware' > /etc/apt/sources.list.d/mobian.list"
           sudo chroot rootfs /bin/bash -c "echo 'deb http://repo.mobian-project.org/ ${{ inputs.debian_version }}-updates main non-free-firmware' >> /etc/apt/sources.list.d/mobian.list"
-          sudo chroot rootfs /bin/bash -c "apt-get update && apt-get install -qqy --no-install-recommends modemmanager qrtr-tools systemd-timesyncd mobile-broadband-provider-info mobian-tweaks-common"
+          if [[ "${{ inputs.modem_enable }}" == "true" ]]; then
+            sudo chroot rootfs /bin/bash -c "apt-get update && apt-get install -qqy --no-install-recommends modemmanager qrtr-tools systemd-timesyncd mobile-broadband-provider-info mobian-tweaks-common"
+          else
+            sudo chroot rootfs /bin/bash -c "apt-get update && apt-get install -qqy --no-install-recommends qrtr-tools systemd-timesyncd mobile-broadband-provider-info mobian-tweaks-common"
+          fi
         fi
         if [ "$ver" = "trixie" ]; then
           sudo rm -f rootfs/etc/profile.d/mobile-tweaks-mali.sh
@@ -358,7 +370,17 @@ jobs:
         img2simg root.img $GITHUB_WORKSPACE/rootfs.img
         echo "status=success" >>$GITHUB_OUTPUT
 
-    # 9. 上传制品
+    # 9. Packaging flash tools
+    - name: Package Flash Tools with rootfs and image
+    id: flash_tools
+      if: steps.rootfs.outputs.status == 'success' && !cancelled()
+      run: |
+        cp $GITHUB_WORKSPACE/boot.img $GITHUB_WORKSPACE/flashtools/boot.img
+        cp $GITHUB_WORKSPACE/rootfs.img $GITHUB_WORKSPACE/flashtools/rootfs.img
+        zip -r $GITHUB_WORKSPACE/flash_tools.zip $GITHUB_WORKSPACE/flashtools
+        echo "status=success" >>$GITHUB_OUTPUT
+
+    # 10. 上传制品
     - name: Upload Artifacts
       if: steps.kernel.outputs.status == 'success' && !cancelled()
       uses: actions/upload-artifact@v4
@@ -371,7 +393,7 @@ jobs:
 
     - name: Generate release tag
       id: tag
-      if: steps.rootfs.outputs.status == 'success' && steps.bootimg.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      if: steps.rootfs.outputs.status == 'success' && steps.bootimg.outputs.status == 'success' && steps.flash_tools.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         echo "release_tag=openstick-${{ inputs.debian_version }}-kernel-${{ steps.configure.outputs.kernel_ver }}-${{ inputs.rootfs_type }}-${{ inputs.openstick_board }}" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
@@ -386,6 +408,7 @@ jobs:
         files: | 
           rootfs.img
           boot.img
+          flash_tools.zip
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
