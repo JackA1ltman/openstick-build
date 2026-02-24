@@ -267,8 +267,9 @@ jobs:
         sudo cp $GITHUB_WORKSPACE/workspace/files/*.nmconnection rootfs/etc/NetworkManager/system-connections
         if [[ "${{ inputs.modem_enable }}" == "false" ]]; then
             sudo rm rootfs/etc/NetworkManager/system-connections/lte.nmconnection
+        else
+            sudo chmod 0600 rootfs/etc/NetworkManager/system-connections/*
         fi
-        sudo chmod 0600 rootfs/etc/NetworkManager/system-connections/*
         sudo mount --bind /proc rootfs/proc 
         sudo mount --bind /dev rootfs/dev 
         sudo mount --bind /dev/pts rootfs/dev/pts 
