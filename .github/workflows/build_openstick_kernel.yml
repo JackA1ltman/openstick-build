@@ -146,6 +146,9 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}  
 
+    - name: Setup ccache
+      uses: Chocobo1/setup-ccache-action@v1
+
     # 4. 编译内核与生成DEB包
     - name: Build Kernel & DEB Packages
       id: kernel
