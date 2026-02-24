@@ -44,7 +44,7 @@ on:
         description: 'Do you want to enable modem functions (4G LTE and SMS) ?'
         required: true
         type: boolean
-        default: 'false'
+        default: 'true'
       config_profile_name:
         description: 'Config profile name (like extra.config)'
         required: false
