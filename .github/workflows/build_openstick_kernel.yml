@@ -372,9 +372,13 @@ jobs:
 
     # 9. Packaging flash tools
     - name: Package Flash Tools with rootfs and image
-    id: flash_tools
+      id: flash_tools
       if: steps.rootfs.outputs.status == 'success' && !cancelled()
       run: |
+        if [[ "${{ inputs.modem_enable }}" == "false" ]]; then
+            mv -f $GITHUB_WORKSPACE/flashtools/NoModem/aboot.bin $GITHUB_WORKSPACE/flashtools/aboot.bin
+        fi
+        rm -r $GITHUB_WORKSPACE/flashtools/NoModem
         cp $GITHUB_WORKSPACE/boot.img $GITHUB_WORKSPACE/flashtools/boot.img
         cp $GITHUB_WORKSPACE/rootfs.img $GITHUB_WORKSPACE/flashtools/rootfs.img
         zip -r $GITHUB_WORKSPACE/flash_tools.zip $GITHUB_WORKSPACE/flashtools
