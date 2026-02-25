@@ -32,3 +32,20 @@ index c77ed04bb6c3..6f7adf6085df 100644
  			function = LED_FUNCTION_WAN;
  		};
  	};
+--- a/arch/arm64/boot/dts/qcom/msm8916.dtsi	2026-02-25 21:04:55.926878071 +0800
++++ b/arch/arm64/boot/dts/qcom/msm8916.dtsi	2026-02-25 21:08:32.925882063 +0800
+@@ -259,6 +259,14 @@
+ 		opp-998400000 {
+ 			opp-hz = /bits/ 64 <998400000>;
+ 		};
++		/* Added: 1.0944 GHz */
++		opp-1094400000 {
++			opp-hz = /bits/ 64 <1094400000>;
++		};
++		/* Added: 1.2096 GHz */
++		opp-1209600000 {
++			opp-hz = /bits/ 64 <1209600000>;
++		};
+ 	};
+ 
+ 	firmware {
