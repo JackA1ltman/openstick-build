@@ -11,7 +11,7 @@ on:
           - ufi001c
           - uz801
       debian_version:
-        description: 'debian version (support 12 or 13)'
+        description: 'debian or ubuntu version (support debian 13, ubuntu noble and plucky)'
         required: true
         type: choice
         default: trixie
