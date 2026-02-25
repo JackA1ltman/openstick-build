@@ -31,7 +31,8 @@ on:
       update_last_kernel_patch:
         description: 'Do you want to update the kernel to the latest patch?'
         required: true
-        default: 'false'
+        type: boolean
+        default: 'true'
       config_profile:
         description: 'Config profile'
         required: true
