@@ -52,10 +52,12 @@ on:
       ssh:
         description: 'SSH connection to Actions'
         required: false
+        type: boolean
         default: 'false'
       upload_release:
         description: 'Upload firmware to release'
         required: false
+        type: boolean
         default: 'true'
       localversion:
         description: 'Set your localversion(e.g. -openstick)'
