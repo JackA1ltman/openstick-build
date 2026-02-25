@@ -135,7 +135,8 @@ jobs:
             ;;
         esac
         make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 savedefconfig
-        git apply $GITHUB_WORKSPACE/workspace/patch/ufi.patch
+        cp $GITHUB_WORKSPACE/workspace/patch/ufi.patch ./
+        patch -p1 < ufi.patch
         if [ ! -z "${{ inputs.localversion }}" ]; then
           sed -i "s/^CONFIG_LOCALVERSION=\".*\"/CONFIG_LOCALVERSION=\"${{ inputs.localversion }}\"/" .config
         fi
