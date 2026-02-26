@@ -174,8 +174,10 @@ jobs:
         mkdir -p $GITHUB_WORKSPACE/artifacts/
         if [[ "${{ inputs.openstick_board }}" == "ufi001c" ]]; then
             cat arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/msm8916-thwc-ufi001c.dtb > $GITHUB_WORKSPACE/artifacts/kernel-dtb
+            cp arch/arm64/boot/dts/qcom/msm8916-thwc-ufi001c.dtb $GITHUB_WORKSPACE/artifacts/msm8916-thwc-ufi001c.dtb
         elif [[ "${{ inputs.openstick_board }}" == "uz801" ]]; then
             cat arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dtb > $GITHUB_WORKSPACE/artifacts/kernel-dtb
+            cp arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dtb $GITHUB_WORKSPACE/artifacts/msm8916-yiming-uz801v3.dtb
         else
             echo "Could not supported the device! Skipped."
         fi
