@@ -148,11 +148,9 @@ jobs:
       run: |
         cd linux-src
         mkdir modules
-        # 编译内核与模块
-        # make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 -j$(nproc) all
         
-        # 生成DEB安装包
-        make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 -j$(nproc)
+        # Build Kernel
+        make ARCH=$ARCH CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- INSTALL_MOD_PATH=./modules modules_install
         
         # 重命名输出文件
