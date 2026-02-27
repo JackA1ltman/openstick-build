@@ -1,0 +1,382 @@
+name: Build Debian for Openstick
+
+on:
+  workflow_dispatch:  # 手动触发
+    inputs:
+      openstick_board:
+        description: 'Board version'
+        type: choice
+        default: ufi001c
+        options:
+          - ufi001c
+          - uz801
+      kernel_version:
+        description: 'Kernel version (e.g. v6.6)'
+        required: true
+        type: choice
+        default: 'wip/msm8916/6.19'
+        options:
+          - 'wip/msm8916/6.19'
+          - 'v6.12.1-msm8916'
+          - 'v6.6-msm8916'
+      update_last_kernel_patch:
+        description: 'Do you want to update the kernel to the latest patch?'
+        required: true
+        type: boolean
+        default: 'true'
+      config_profile:
+        description: 'Config profile'
+        required: true
+        type: choice
+        default: 'custom'
+        options:
+          - defconfig
+          - custom
+      modem_enable:
+        description: 'Do you want to enable modem functions (4G LTE and SMS) ?'
+        required: true
+        type: boolean
+        default: 'true'
+      config_profile_name:
+        description: 'Config profile name (like extra.config)'
+        required: false
+        default: 'extra'
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        type: boolean
+        default: 'false'
+      upload_release:
+        description: 'Upload firmware to release'
+        required: false
+        type: boolean
+        default: 'true'
+      localversion:
+        description: 'Set your localversion(e.g. -openstick)'
+        required: false
+        default: '-jackaltman'
+      rootfs_type:
+        description: 'Set rootfs type(e.g. ext4/btrfs)'
+        type: choice
+        default: btrfs
+        required: false
+        options:
+          - btrfs
+          - ext4
+
+jobs:
+  build_debian:
+    runs-on: ubuntu-latest
+    env:
+      ARCH: arm64
+      ARCH_VERSION: ${{ github.run_id }}  # 用运行ID确保版本唯一性
+      TERM: xterm
+      UPLOAD_RELEASE: ${{ inputs.upload_release }}
+
+    steps:
+    # 1. 环境初始化
+    - name: Setup Build Environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential libncurses-dev libssl-dev bc flex bison \
+          gcc-14 g++-14 dpkg-dev kmod cpio rsync u-boot-tools \
+          debhelper libelf-dev libssl-dev coreutils \
+          android-sdk-libsparse-utils wget gcc-14-aarch64-linux-gnu \
+          curl libdw-dev zip arch-install-scripts
+          wget http://ftp.debian.org/debian/pool/main/a/android-platform-tools/mkbootimg_34.0.5-12_all.deb
+          sudo dpkg -i mkbootimg_34.0.5-12_all.deb
+      # 安装编译依赖项 [5,6](@ref)
+
+    # 2-1. 获取本项目源码
+    - name: Checkout Workflow Repo
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+        submodules: recursive
+        path: workspace
+
+    # 2-2. 获取内核源码
+    - name: Checkout Kernel Source
+      uses: actions/checkout@v4
+      with:
+        repository: msm8916-mainline/linux
+        ref: ${{ inputs.kernel_version }}  # 使用输入的内核版本
+        path: linux-src
+
+    # 3. 内核配置
+    - name: Configure Kernel
+      id: configure
+      run: |
+        cd linux-src
+        if [ "${{ inputs.update_last_kernel_patch }}"="true" ]; then
+          chmod +x $GITHUB_WORKSPACE/workspace/update-kernel.sh
+          $GITHUB_WORKSPACE/workspace/update-kernel.sh
+        fi
+        case "${{ inputs.config_profile }}" in
+          defconfig)
+            make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 msm8916_defconfig
+            ;;
+          custom)
+            make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 msm8916_defconfig
+            scripts/kconfig/merge_config.sh -m -Q .config  $GITHUB_WORKSPACE/workspace/configs/${{ inputs.config_profile_name }}.config # 使用仓库中的自定义配置
+            make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 olddefconfig
+            ;;
+        esac
+        make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 savedefconfig
+        cp $GITHUB_WORKSPACE/workspace/patch/ufi.patch ./
+        patch -p1 < ufi.patch
+        if [ ! -z "${{ inputs.localversion }}" ]; then
+          sed -i "s/^CONFIG_LOCALVERSION=\".*\"/CONFIG_LOCALVERSION=\"${{ inputs.localversion }}\"/" .config
+        fi
+        KERNEL_VER=$(make kernelversion)
+        echo "kernel_ver=$KERNEL_VER" >> $GITHUB_OUTPUT
+        
+    - name: SSH connection to Actions
+      uses: P3TERX/ssh2actions@v1.0.0
+      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}  
+
+    - name: Setup ccache
+      uses: Chocobo1/setup-ccache-action@v1
+
+    # 4. 编译内核与生成DEB包
+    - name: Build Kernel & DEB Packages
+      id: kernel
+      run: |
+        cd linux-src
+        mkdir modules
+        # 编译内核与模块
+        # make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 -j$(nproc) all
+        
+        # 生成DEB安装包
+        make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 -j$(nproc)
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- INSTALL_MOD_PATH=./modules modules_install
+        
+        # 重命名输出文件
+        mkdir -p $GITHUB_WORKSPACE/artifacts/
+        if [[ "${{ inputs.openstick_board }}" == "ufi001c" ]]; then
+            cat arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/msm8916-thwc-ufi001c.dtb > $GITHUB_WORKSPACE/artifacts/kernel-dtb
+            cp arch/arm64/boot/dts/qcom/msm8916-thwc-ufi001c.dtb $GITHUB_WORKSPACE/artifacts/msm8916-thwc-ufi001c.dtb
+        elif [[ "${{ inputs.openstick_board }}" == "uz801" ]]; then
+            cat arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dtb > $GITHUB_WORKSPACE/artifacts/kernel-dtb
+            cp arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dtb $GITHUB_WORKSPACE/artifacts/msm8916-yiming-uz801v3.dtb
+        else
+            echo "Could not supported the device! Skipped."
+        fi
+        mv ../linux-*.deb ../artifacts/
+        echo "status=success" >>$GITHUB_OUTPUT
+
+    # 5. 生成root.img,格式化为btrfs格式
+    - name: Build Rootfs
+      id: root
+      if: steps.kernel.outputs.status == 'success' && !cancelled()
+      run: |
+        mkdir -p rootfs 
+        mkdir -p img
+        sudo truncate -s 1073741824  root.img
+        if [ "${{ inputs.rootfs_type }}" = "btrfs" ]; then
+          sudo mkfs.btrfs -O free-space-tree --metadata single --data single --label "rootfs" -U a7ab80e8-e9d1-e8cd-f157-93f69b1d141e root.img
+          sudo losetup -fP root.img
+          sudo mount -t btrfs -o compress=zstd,defaults,noatime,sync /dev/loop0 img/
+        else
+          sudo mkfs.ext4 -L rootfs -m 0 -O ^has_journal -E lazy_itable_init=0,lazy_journal_init=0 -b 4096 -I 256 root.img
+          sudo losetup -fP root.img
+          sudo mount -o sync /dev/loop0 img/
+        fi
+        echo "status=success" >>$GITHUB_OUTPUT
+  
+    # 7. 生成boot.img
+    - name: Build Boot img
+      id: bootimg
+      if: steps.root.outputs.status == 'success' && !cancelled()
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static qemu-user
+
+        wget https://mirrors.tuna.tsinghua.edu.cn/archlinuxarm/os/ArchLinuxARM-aarch64-latest.tar.gz
+        sudo mount --bind rootfs rootfs
+        sudo bsdtar -xpf ArchLinuxARM-aarch64-latest.tar.gz -C rootfs
+
+        if [[ -f $GITHUB_WORKSPACE/workspace/packages_archlinux.txt ]]; then
+          PKGS=$(grep -vE '^\s*#' $GITHUB_WORKSPACE/workspace/packages_archlinux.txt | tr '\n' ',' | sed 's/,$//')
+          echo "📦 将安装的额外包: $PKGS"
+        else
+          echo "⚠️ 未找到 $PKG_LIST_FILE，跳过 --include"
+          PKGS=""
+        fi
+
+        sudo cp -p /usr/bin/qemu-aarch64-static rootfs/bin/qemu-aarch64-static
+        echo "root:1" | sudo arch-chroot rootfs qemu-aarch64-static chpasswd
+
+        if [[ "${{ inputs.openstick_board }}" == "ufi001c" ]]; then
+            sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/firmware/ufi001c rootfs/usr/lib/firmware
+        elif [[ "${{ inputs.openstick_board }}" == "uz801" ]]; then
+            sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/firmware/uz801 rootfs/usr/lib/firmware
+        else
+            echo "Could not supported the device! Skipped."
+        fi
+
+        sudo chmod -R 644 rootfs/usr/lib/firmware
+        sudo cp -a --update=none $GITHUB_WORKSPACE/workspace/files/system/* rootfs/etc/systemd/system
+        version="${{ steps.configure.outputs.kernel_ver }}"
+        target_major=6
+        target_minor=6
+        # 去掉 -rc 等后缀，只取前两位
+        clean_version=$(echo "$version" | sed 's/-.*//' )
+        IFS='.' read -r major minor _ <<< "$clean_version"
+        echo "Parsed version: $major.$minor"
+        if (( major > target_major )) || { (( major == target_major )) && (( minor > target_minor )); }; then
+          echo "Kernel version is greater than 6.6, a dnsmasq template needs to be created for AP mode"
+          sudo cp -a $GITHUB_WORKSPACE/workspace/files/dhcp.conf rootfs/etc/dnsmasq.d/dhcp.conf
+        fi
+
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman-key --init"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman-key --populate archlinuxarm"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -Rcns linux-aarch64 --disable-sandbox"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -Syyu --disable-sandbox"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -S arch-install-scripts cloud-guest-utils --disable-sandbox"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -S base archlinuxarm-keyring networkmanager openssh vim sudo base-devel git --disable-sandbox"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cd /root && curl -L -o sdbd.pkg.tar.zst https://github.com/openbfdev/sdbd/releases/download/nightly/sdbd-archlinux-aarch64.pkg.tar.zst"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cd /root && pacstrap -cGMU /mnt ./sdbd.pkg.tar.zst"
+
+        sudo mkdir -p rootfs/etc/NetworkManager/system-connections
+        sudo cp $GITHUB_WORKSPACE/workspace/files/*.nmconnection rootfs/etc/NetworkManager/system-connections
+        if [[ "${{ inputs.modem_enable }}" == "false" ]]; then
+            sudo rm rootfs/etc/NetworkManager/system-connections/lte.nmconnection
+        else
+            sudo chmod 0600 rootfs/etc/NetworkManager/system-connections/*
+        fi
+
+        sudo cp /etc/resolv.conf rootfs/etc/resolv.conf
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo openstick > /etc/hostname"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo 'en_US.UTF-8 UTF-8' >> /etc/locale.gen && locale-gen && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo 'export TERM=xterm-256color' >> /etc/profile"
+
+        sudo cp $GITHUB_WORKSPACE/workspace/files/*.rules rootfs/etc/udev/rules.d/
+        sudo cp $GITHUB_WORKSPACE/workspace/files/*.sh rootfs/usr/local/bin/
+        sudo cp $GITHUB_WORKSPACE/workspace/files/10-uname rootfs/etc/update-motd.d/
+        sudo chmod +x rootfs/etc/update-motd.d/10-uname
+        sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/usr rootfs/
+        # sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/f2fs_resize rootfs/etc/initramfs-tools/hooks/
+        # sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/resize-f2fs rootfs/etc/initramfs-tools/scripts/init-premount/
+        # sudo chmod +x rootfs/etc/initramfs-tools/hooks/f2fs_resize
+        # sudo chmod +x rootfs/etc/initramfs-tools/scripts/init-premount/resize-f2fs
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "chmod +x /usr/local/bin/*.sh"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "chmod +x /usr/sbin/*.sh"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "rm -f /root/*dbg*"
+
+        sudo sed -i 's/^#SIZE=[0-9]\+/SIZE=512/' rootfs/etc/default/zramswap
+
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "rm -f /etc/resolv.conf"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "chmod +x /usr/bin/adbd /usr/bin/gc /usr/sbin/*.sh"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "systemctl enable openstick-button-monitor openstick-gc-startup openstick-startup-diagnose.timer"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "systemctl enable resize-rootfs.service regenerate-ssh-host-keys.service"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "find /var/log -type f -delete"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cat /dev/null > /root/.bash_history"
+        sudo rm -f rootfs/etc/machine-id
+        sudo rm rootfs/bin/qemu-aarch64-static
+        export PYTHONPATH=/usr/share/android-tools/mkbootimg
+
+        if [ "${{ inputs.rootfs_type }}" = "btrfs" ]; then
+          CMDLINE="earlycon root=PARTUUID=a7ab80e8-e9d1-e8cd-f157-93f69b1d141e rootflags=compress=zstd,defaults,noatime,discard=async,autodefrag,space_cache=v2,commit=5 console=ttyMSM0,115200 audit=0 no_framebuffer=true rw"
+        else
+          CMDLINE="earlycon root=LABEL=rootfs console=ttyMSM0,115200 audit=0 no_framebuffer=true rw"
+        fi
+        echo "✅ 使用的 cmdline: $CMDLINE"
+        mkbootimg \
+          --base 0x80000000 \
+          --kernel_offset 0x00080000 \
+          --tags_offset 0x01e00000 \
+          --pagesize 2048 \
+          --second_offset 0x00f00000 \
+          --cmdline "$CMDLINE" \
+          --kernel $GITHUB_WORKSPACE/artifacts/kernel-dtb \
+          -o $GITHUB_WORKSPACE/boot.img
+        echo "status=success" >>$GITHUB_OUTPUT
+    # 8. 打包roofs.img
+    - name: Package Rootfs
+      id: rootfs
+      if: steps.root.outputs.status == 'success' && !cancelled()
+      run: |
+        sudo rsync -axv rootfs/* img
+        if [ "${{ inputs.rootfs_type }}" = "btrfs" ]; then
+          sudo arch-chroot img /bin/bash -c "chattr +C /var/cache"
+          sudo arch-chroot img /bin/bash -c "chattr +C /var/tmp"
+          sudo arch-chroot img /bin/bash -c "chattr +C /var/log/journal"
+          sudo arch-chroot img /bin/bash -c "chattr +C /var/log"
+        fi
+        sudo sync
+        sudo umount img
+        img2simg root.img $GITHUB_WORKSPACE/rootfs.img
+        echo "status=success" >>$GITHUB_OUTPUT
+
+    # 9. Packaging flash tools
+    - name: Package Flash Tools with rootfs and image
+      id: flash_tools
+      if: steps.rootfs.outputs.status == 'success' && !cancelled()
+      run: |
+        if [[ "${{ inputs.modem_enable }}" == "false" ]]; then
+            mv -f $GITHUB_WORKSPACE/workspace/flashtools/NoModem/aboot.bin $GITHUB_WORKSPACE/workspace/flashtools/aboot.bin
+        fi
+        rm -r $GITHUB_WORKSPACE/workspace/flashtools/NoModem
+        cp $GITHUB_WORKSPACE/boot.img $GITHUB_WORKSPACE/workspace/flashtools/boot.img
+        cp $GITHUB_WORKSPACE/rootfs.img $GITHUB_WORKSPACE/workspace/flashtools/rootfs.img
+        cd $GITHUB_WORKSPACE/workspace/flashtools
+        zip -r $GITHUB_WORKSPACE/flash_tools.zip ./
+        echo "status=success" >>$GITHUB_OUTPUT
+
+        if [[ "${{ inputs.modem_enable }}" == "true" ]]; then
+            echo "modem_status=modem_enabled" >>$GITHUB_ENV
+        else
+            echo "modem_status=no_modem" >>$GITHUB_ENV
+        fi
+
+    # 10. 上传制品
+    - name: Upload Artifacts
+      if: steps.kernel.outputs.status == 'success' && !cancelled()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-${{ steps.configure.outputs.kernel_ver }}-arm64-debs
+        path: |
+          artifacts/*
+          linux-src/arch/arm64/boot/Image
+          linux-src/defconfig
+
+    - name: Generate release tag
+      id: tag
+      if: steps.rootfs.outputs.status == 'success' && steps.bootimg.outputs.status == 'success' && steps.flash_tools.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        echo "release_tag=openstick-${{ inputs.debian_version }}-kernel-${{ steps.configure.outputs.kernel_ver }}-${{ inputs.rootfs_type }}-${{ env.modem_status }}-${{ inputs.openstick_board }}" >> $GITHUB_OUTPUT
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload firmware to release
+      uses: softprops/action-gh-release@master
+      if: steps.tag.outputs.status == 'success' && !cancelled()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        files: | 
+          rootfs.img
+          boot.img
+          flash_tools.zip
+
+    - name: Delete workflow runs
+      uses: Mattraks/delete-workflow-runs@main
+      with:
+        retain_days: 1
+        keep_minimum_runs: 3
+
+    - name: Remove old Releases
+      uses: dev-drprasad/delete-older-releases@master
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        keep_latest: 3
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
