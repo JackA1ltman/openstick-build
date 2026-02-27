@@ -80,9 +80,9 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           build-essential libncurses-dev libssl-dev bc flex bison \
-          gcc-14 g++-14 dpkg-dev kmod cpio rsync u-boot-tools \
+          gcc-arm-none-eabi gcc-aarch64-linux-gnu dpkg-dev kmod cpio rsync u-boot-tools \
           debhelper libelf-dev libssl-dev coreutils \
-          android-sdk-libsparse-utils wget gcc-14-aarch64-linux-gnu \
+          android-sdk-libsparse-utils wget \
           curl libdw-dev zip arch-install-scripts
           wget http://ftp.debian.org/debian/pool/main/a/android-platform-tools/mkbootimg_34.0.5-12_all.deb
           sudo dpkg -i mkbootimg_34.0.5-12_all.deb
@@ -115,15 +115,15 @@ jobs:
         fi
         case "${{ inputs.config_profile }}" in
           defconfig)
-            make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 msm8916_defconfig
+            make ARCH=$ARCH CROSS_COMPILE=aarch64-linux-gnu- msm8916_defconfig
             ;;
           custom)
-            make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 msm8916_defconfig
+            make ARCH=$ARCH CROSS_COMPILE=aarch64-linux-gnu- msm8916_defconfig
             scripts/kconfig/merge_config.sh -m -Q .config  $GITHUB_WORKSPACE/workspace/configs/${{ inputs.config_profile_name }}.config # 使用仓库中的自定义配置
-            make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 olddefconfig
+            make ARCH=$ARCH CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
             ;;
         esac
-        make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 savedefconfig
+        make ARCH=$ARCH CROSS_COMPILE=aarch64-linux-gnu- savedefconfig
         cp $GITHUB_WORKSPACE/workspace/patch/ufi.patch ./
         patch -p1 < ufi.patch
         if [ ! -z "${{ inputs.localversion }}" ]; then
