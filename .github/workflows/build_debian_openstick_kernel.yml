@@ -391,7 +391,8 @@ jobs:
         rm -r $GITHUB_WORKSPACE/workspace/flashtools/NoModem
         cp $GITHUB_WORKSPACE/boot.img $GITHUB_WORKSPACE/workspace/flashtools/boot.img
         cp $GITHUB_WORKSPACE/rootfs.img $GITHUB_WORKSPACE/workspace/flashtools/rootfs.img
-        zip -r $GITHUB_WORKSPACE/flash_tools.zip $GITHUB_WORKSPACE/workspace/flashtools
+        cd $GITHUB_WORKSPACE/workspace/flashtools
+        zip -r $GITHUB_WORKSPACE/flash_tools.zip ./
         echo "status=success" >>$GITHUB_OUTPUT
 
         if [[ "${{ inputs.modem_enable }}" == "true" ]]; then
