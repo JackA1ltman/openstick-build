@@ -216,6 +216,15 @@ jobs:
             echo "Could not supported the device! Skipped."
         fi
 
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman-key --init"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman-key --populate archlinuxarm"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -Rcns linux-aarch64 --disable-sandbox"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -Syyu --disable-sandbox"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -S arch-install-scripts cloud-guest-utils --disable-sandbox"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -S base archlinuxarm-keyring networkmanager openssh vim sudo base-devel git dnsmasq --disable-sandbox"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cd /root && curl -L -o sdbd.pkg.tar.zst https://github.com/openbfdev/sdbd/releases/download/nightly/sdbd-archlinux-aarch64.pkg.tar.zst"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cd /root && pacstrap -cGMU /mnt ./sdbd.pkg.tar.zst"
+
         sudo chmod -R 644 rootfs/usr/lib/firmware
         sudo cp -a --update=none $GITHUB_WORKSPACE/workspace/files/system/* rootfs/etc/systemd/system
         version="${{ steps.configure.outputs.kernel_ver }}"
@@ -229,15 +238,6 @@ jobs:
           echo "Kernel version is greater than 6.6, a dnsmasq template needs to be created for AP mode"
           sudo cp -a $GITHUB_WORKSPACE/workspace/files/dhcp.conf rootfs/etc/dnsmasq.d/dhcp.conf
         fi
-
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman-key --init"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman-key --populate archlinuxarm"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -Rcns linux-aarch64 --disable-sandbox"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -Syyu --disable-sandbox"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -S arch-install-scripts cloud-guest-utils --disable-sandbox"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "pacman --noconfirm -S base archlinuxarm-keyring networkmanager openssh vim sudo base-devel git --disable-sandbox"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cd /root && curl -L -o sdbd.pkg.tar.zst https://github.com/openbfdev/sdbd/releases/download/nightly/sdbd-archlinux-aarch64.pkg.tar.zst"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cd /root && pacstrap -cGMU /mnt ./sdbd.pkg.tar.zst"
 
         sudo mkdir -p rootfs/etc/NetworkManager/system-connections
         sudo cp $GITHUB_WORKSPACE/workspace/files/*.nmconnection rootfs/etc/NetworkManager/system-connections
