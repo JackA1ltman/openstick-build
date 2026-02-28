@@ -151,7 +151,7 @@ jobs:
         
         # Build Kernel
         make ARCH=$ARCH CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- INSTALL_MOD_PATH=./modules modules_install
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- INSTALL_MOD_PATH=$GITHUB_WORKSPACE/modules modules_install
         
         # 重命名输出文件
         mkdir -p $GITHUB_WORKSPACE/artifacts/
@@ -206,7 +206,6 @@ jobs:
         fi
 
         sudo cp /usr/bin/qemu-aarch64-static rootfs/bin/qemu-aarch64-static
-        # echo "root:1" | sudo arch-chroot rootfs qemu-aarch64-static chpasswd
 
         if [[ "${{ inputs.openstick_board }}" == "ufi001c" ]]; then
             sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/firmware/ufi001c rootfs/usr/lib/firmware
@@ -226,55 +225,28 @@ jobs:
         sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cd /root && pacstrap -cGMU /mnt ./sdbd.pkg.tar.zst"
 
         sudo chmod -R 644 rootfs/usr/lib/firmware
-        sudo cp -a --update=none $GITHUB_WORKSPACE/workspace/files/system/* rootfs/etc/systemd/system
-        version="${{ steps.configure.outputs.kernel_ver }}"
-        target_major=6
-        target_minor=6
-        # 去掉 -rc 等后缀，只取前两位
-        clean_version=$(echo "$version" | sed 's/-.*//' )
-        IFS='.' read -r major minor _ <<< "$clean_version"
-        echo "Parsed version: $major.$minor"
-        if (( major > target_major )) || { (( major == target_major )) && (( minor > target_minor )); }; then
-          echo "Kernel version is greater than 6.6, a dnsmasq template needs to be created for AP mode"
-          sudo mkdir -p rootfs/etc/dnsmasq.d
-          sudo cp -a $GITHUB_WORKSPACE/workspace/files/dhcp.conf rootfs/etc/dnsmasq.d/dhcp.conf
-        fi
 
-        sudo mkdir -p rootfs/etc/NetworkManager/system-connections
-        #sudo cp $GITHUB_WORKSPACE/workspace/files/*.nmconnection rootfs/etc/NetworkManager/system-connections
-        #if [[ "${{ inputs.modem_enable }}" == "false" ]]; then
-        #    sudo rm rootfs/etc/NetworkManager/system-connections/lte.nmconnection
-        #else
-        #    sudo chmod 0600 rootfs/etc/NetworkManager/system-connections/*
-        #fi
+        sudo cp -p $GITHUB_WORKSPACE/workspace/files/system/service/* rootfs/usr/lib/systemd/system/
+        sudo cp -p $GITHUB_WORKSPACE/workspace/files/usr/* rootfs/usr/
 
-        sudo cp /etc/resolv.conf rootfs/etc/resolv.conf
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo openstick > /etc/hostname"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo 'export TERM=xterm-256color' >> /etc/profile"
+        sudo echo "Server = $mirror" > rootfs/etc/pacman.d/mirrorlist
+        sudo echo -e '\n[archlinuxcn]' >> rootfs/etc/pacman.conf
+        sudo echo 'Server = https://repo.archlinuxcn.org/$arch' >> rootfs/etc/pacman.conf
 
-        sudo cp $GITHUB_WORKSPACE/workspace/files/*.rules rootfs/etc/udev/rules.d/
-        sudo cp $GITHUB_WORKSPACE/workspace/files/*.sh rootfs/usr/local/bin/
-        sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/usr rootfs/
-        # sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/f2fs_resize rootfs/etc/initramfs-tools/hooks/
-        # sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/resize-f2fs rootfs/etc/initramfs-tools/scripts/init-premount/
-        # sudo chmod +x rootfs/etc/initramfs-tools/hooks/f2fs_resize
-        # sudo chmod +x rootfs/etc/initramfs-tools/scripts/init-premount/resize-f2fs
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "chmod +x /usr/local/bin/*.sh"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "chmod +x /usr/sbin/*.sh"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "rm -f /root/*dbg*"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo 'alarm' > /etc/hostname"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo 'LANG=C' > /etc/locale.conf"
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo -n > /etc/machine-id"
 
-        sudo sed -i 's/^#SIZE=[0-9]\+/SIZE=512/' rootfs/etc/default/zramswap
+        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "systemctl enable systemd-networkd systemd-resolved systemd-timesyncd NetworkManager sshd rc-local resize2fs"
 
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "rm -f /etc/resolv.conf"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "chmod +x /usr/bin/adbd /usr/bin/gc /usr/sbin/*.sh"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "systemctl enable openstick-button-monitor openstick-gc-startup openstick-startup-diagnose.timer"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "systemctl enable resize-rootfs.service regenerate-ssh-host-keys.service"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "find /var/log -type f -delete"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cat /dev/null > /root/.bash_history"
-        sudo rm -f rootfs/etc/machine-id
         sudo rm rootfs/bin/qemu-aarch64-static
+
         export PYTHONPATH=/usr/share/android-tools/mkbootimg
+
+        cp -rp "$GITHUB_WORKSPACE/modules/lib/modules" "rootfs/lib"
+        for version in $(ls "rootfs/lib/modules"); do
+          sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "depmod -av $version"
+        done
 
         if [ "${{ inputs.rootfs_type }}" = "btrfs" ]; then
           CMDLINE="earlycon root=PARTUUID=a7ab80e8-e9d1-e8cd-f157-93f69b1d141e rootflags=compress=zstd,defaults,noatime,discard=async,autodefrag,space_cache=v2,commit=5 console=ttyMSM0,115200 audit=0 no_framebuffer=true rw"
