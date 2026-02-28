@@ -241,12 +241,12 @@ jobs:
         fi
 
         sudo mkdir -p rootfs/etc/NetworkManager/system-connections
-        sudo cp $GITHUB_WORKSPACE/workspace/files/*.nmconnection rootfs/etc/NetworkManager/system-connections
-        if [[ "${{ inputs.modem_enable }}" == "false" ]]; then
-            sudo rm rootfs/etc/NetworkManager/system-connections/lte.nmconnection
-        else
-            sudo chmod 0600 rootfs/etc/NetworkManager/system-connections/*
-        fi
+        #sudo cp $GITHUB_WORKSPACE/workspace/files/*.nmconnection rootfs/etc/NetworkManager/system-connections
+        #if [[ "${{ inputs.modem_enable }}" == "false" ]]; then
+        #    sudo rm rootfs/etc/NetworkManager/system-connections/lte.nmconnection
+        #else
+        #    sudo chmod 0600 rootfs/etc/NetworkManager/system-connections/*
+        #fi
 
         sudo cp /etc/resolv.conf rootfs/etc/resolv.conf
         sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo openstick > /etc/hostname"
