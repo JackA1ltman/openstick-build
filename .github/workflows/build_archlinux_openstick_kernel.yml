@@ -250,7 +250,6 @@ jobs:
 
         sudo cp /etc/resolv.conf rootfs/etc/resolv.conf
         sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo openstick > /etc/hostname"
-        sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo 'en_US.UTF-8 UTF-8' >> /etc/locale.gen && locale-gen && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8"
         sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime"
         sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo 'export TERM=xterm-256color' >> /etc/profile"
 
