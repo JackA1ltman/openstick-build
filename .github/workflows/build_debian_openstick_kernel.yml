@@ -135,8 +135,22 @@ jobs:
             ;;
         esac
         make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 savedefconfig
-        cp $GITHUB_WORKSPACE/workspace/patch/ufi.patch ./
-        patch -p1 < ufi.patch
+
+        for patch_file in $(ls "$GITHUB_WORKSPACE/workspace/patch"/*.patch | sort); do
+          if [ -f "$patch_file" ]; then
+            echo "Patching: $patch_file"
+
+            cp "$patch_file" ./
+            patch -p1 < "$patch_file"
+
+            if [ $? -eq 0 ]; then
+                echo "Successfully: $patch_file"
+            else
+                echo "Failed: $patch_file"
+            fi
+          fi
+        done
+
         if [ ! -z "${{ inputs.localversion }}" ]; then
           sed -i "s/^CONFIG_LOCALVERSION=\".*\"/CONFIG_LOCALVERSION=\"${{ inputs.localversion }}\"/" .config
         fi
