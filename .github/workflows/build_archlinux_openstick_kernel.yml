@@ -255,8 +255,6 @@ jobs:
 
         sudo cp $GITHUB_WORKSPACE/workspace/files/*.rules rootfs/etc/udev/rules.d/
         sudo cp $GITHUB_WORKSPACE/workspace/files/*.sh rootfs/usr/local/bin/
-        sudo cp $GITHUB_WORKSPACE/workspace/files/10-uname rootfs/etc/update-motd.d/
-        sudo chmod +x rootfs/etc/update-motd.d/10-uname
         sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/usr rootfs/
         # sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/f2fs_resize rootfs/etc/initramfs-tools/hooks/
         # sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/resize-f2fs rootfs/etc/initramfs-tools/scripts/init-premount/
