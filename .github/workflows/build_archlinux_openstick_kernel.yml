@@ -205,9 +205,7 @@ jobs:
           PKGS=""
         fi
 
-        sudo ls -al /usr/bin/
-        sudo ls -al rootfs/bin
-        sudo cp -p /usr/bin/qemu-aarch64-static rootfs/bin/qemu-aarch64-static
+        sudo cp /usr/bin/qemu-aarch64-static rootfs/bin/qemu-aarch64-static
         echo "root:1" | sudo arch-chroot rootfs qemu-aarch64-static chpasswd
 
         if [[ "${{ inputs.openstick_board }}" == "ufi001c" ]]; then
