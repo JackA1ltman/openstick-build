@@ -236,6 +236,7 @@ jobs:
         echo "Parsed version: $major.$minor"
         if (( major > target_major )) || { (( major == target_major )) && (( minor > target_minor )); }; then
           echo "Kernel version is greater than 6.6, a dnsmasq template needs to be created for AP mode"
+          sudo mkdir -p rootfs/etc/dnsmasq.d
           sudo cp -a $GITHUB_WORKSPACE/workspace/files/dhcp.conf rootfs/etc/dnsmasq.d/dhcp.conf
         fi
 
