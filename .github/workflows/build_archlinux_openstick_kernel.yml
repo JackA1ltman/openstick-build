@@ -164,7 +164,6 @@ jobs:
         else
             echo "Could not supported the device! Skipped."
         fi
-        mv ../linux-*.deb ../artifacts/
         echo "status=success" >>$GITHUB_OUTPUT
 
     # 5. 生成root.img,格式化为btrfs格式
