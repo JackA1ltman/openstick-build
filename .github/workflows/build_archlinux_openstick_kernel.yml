@@ -206,7 +206,7 @@ jobs:
         fi
 
         sudo cp /usr/bin/qemu-aarch64-static rootfs/bin/qemu-aarch64-static
-        echo "root:1" | sudo arch-chroot rootfs qemu-aarch64-static chpasswd
+        # echo "root:1" | sudo arch-chroot rootfs qemu-aarch64-static chpasswd
 
         if [[ "${{ inputs.openstick_board }}" == "ufi001c" ]]; then
             sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/firmware/ufi001c rootfs/usr/lib/firmware
