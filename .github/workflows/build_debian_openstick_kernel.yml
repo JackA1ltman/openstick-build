@@ -172,9 +172,7 @@ jobs:
       id: kernel
       run: |
         cd linux-src
-        # 编译内核与模块
-        # make ARCH=$ARCH CC=gcc-14 HOSTCC=gcc-14 -j$(nproc) all
-        
+
         # 生成DEB安装包
         make ARCH=$ARCH \
           CC=gcc-14 HOSTCC=gcc-14 \
@@ -199,7 +197,7 @@ jobs:
         echo "status=success" >>$GITHUB_OUTPUT
 
     # 5. 生成root.img,格式化为btrfs格式
-    - name: Build Rootfs
+    - name: Create Rootfs IMG
       id: root
       if: steps.kernel.outputs.status == 'success' && !cancelled()
       run: |
@@ -218,12 +216,15 @@ jobs:
         echo "status=success" >>$GITHUB_OUTPUT
   
     # 7. 生成boot.img
-    - name: Build Boot img
+    - name: Build Rootfs IMG and Boot IMG
       id: bootimg
       if: steps.root.outputs.status == 'success' && !cancelled()
       run: |
+        # Install Neccssary packages for environment
         sudo apt-get update
         sudo apt-get install -y qemu-user-static binfmt-support
+
+        # Pick need packages to build rootfs IMG
         if [[ -f $GITHUB_WORKSPACE/workspace/packages_debian.txt ]]; then
           PKGS=$(grep -vE '^\s*#' $GITHUB_WORKSPACE/workspace/packages_debian.txt | tr '\n' ',' | sed 's/,$//')
           echo "📦 将安装的额外包: $PKGS"
@@ -232,6 +233,7 @@ jobs:
           PKGS=""
         fi
 
+        # Set OSTYPE
         ver="${{ inputs.debian_version }}"
         if [ "$ver" = "trixie" ]; then
           OSTYPE=debian
@@ -240,6 +242,7 @@ jobs:
         fi
         echo "OSTYPE=$OSTYPE" >> $GITHUB_ENV
 
+        # Install packages in list
         DEBURL="http://deb.debian.org/debian"
         DEBSRC="main,contrib,non-free,non-free-firmware"
         if [ "$OSTYPE" = "ubuntu" ]; then
@@ -258,11 +261,14 @@ jobs:
         else
           sudo DEBIAN_FRONTEND=noninteractive debootstrap --foreign --arch=arm64 --variant=minbase --components="$DEBSRC" ${{ inputs.debian_version }} rootfs "$DEBURL"
         fi
+
+        # Stage 2
         sudo cp /usr/bin/qemu-aarch64-static rootfs/usr/bin/
         sudo chroot rootfs /debootstrap/debootstrap --second-stage
-        echo "root:1" | sudo chroot rootfs chpasswd
+        echo "root:1" | sudo chroot rootfs chpasswd # Set root password
         sudo rm rootfs/usr/bin/qemu-aarch64-static
 
+        # Move firmware to rootfs
         if [[ "${{ inputs.openstick_board }}" == "ufi001c" ]]; then
             sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/firmware/ufi001c rootfs/usr/lib/firmware
         elif [[ "${{ inputs.openstick_board }}" == "uz801" ]]; then
@@ -270,9 +276,12 @@ jobs:
         else
             echo "Could not supported the device! Skipped."
         fi
-
         sudo chmod -R 644 rootfs/usr/lib/firmware
+
+        # Set some systemd services
         sudo cp -a --update=none $GITHUB_WORKSPACE/workspace/files/system/* rootfs/etc/systemd/system
+
+        # Set configs
         version="${{ steps.configure.outputs.kernel_ver }}"
         target_major=6
         target_minor=6
@@ -290,32 +299,35 @@ jobs:
         else
             sudo chmod 0600 rootfs/etc/NetworkManager/system-connections/*
         fi
+
+        # Mount partition
         sudo mount --bind /proc rootfs/proc 
         sudo mount --bind /dev rootfs/dev 
         sudo mount --bind /dev/pts rootfs/dev/pts 
         sudo mount --bind /sys rootfs/sys
+
+        # Base system
         sudo cp /etc/resolv.conf rootfs/etc/resolv.conf
         sudo chroot rootfs /bin/bash -c "echo openstick > /etc/hostname"
         sudo chroot rootfs /bin/bash -c "echo 'en_US.UTF-8 UTF-8' >> /etc/locale.gen && locale-gen && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8"
         sudo chroot rootfs /bin/bash -c "cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime"
         sudo chroot rootfs /bin/bash -c "echo 'export TERM=xterm-256color' >> /etc/profile"
         sudo chroot rootfs /bin/bash -c "sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin yes/' /etc/ssh/sshd_config"
+
         sudo cp $GITHUB_WORKSPACE/artifacts/*.deb rootfs/root/
         sudo cp $GITHUB_WORKSPACE/workspace/files/*.rules rootfs/etc/udev/rules.d/
         sudo cp $GITHUB_WORKSPACE/workspace/files/*.sh rootfs/usr/local/bin/
         sudo cp $GITHUB_WORKSPACE/workspace/files/10-uname rootfs/etc/update-motd.d/
         sudo chmod +x rootfs/etc/update-motd.d/10-uname
         sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/usr rootfs/
-        # sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/f2fs_resize rootfs/etc/initramfs-tools/hooks/
-        # sudo cp -r --update=none $GITHUB_WORKSPACE/workspace/files/resize-f2fs rootfs/etc/initramfs-tools/scripts/init-premount/
-        # sudo chmod +x rootfs/etc/initramfs-tools/hooks/f2fs_resize
-        # sudo chmod +x rootfs/etc/initramfs-tools/scripts/init-premount/resize-f2fs
+
         sudo chroot rootfs /bin/bash -c "chmod +x /usr/local/bin/*.sh"
         sudo chroot rootfs /bin/bash -c "chmod +x /usr/sbin/*.sh"
         sudo chroot rootfs /bin/bash -c "rm -f /root/*dbg*"
         sudo chroot rootfs /bin/bash -c "dpkg -i /root/*.deb"
         sudo chroot rootfs /bin/bash -c "rm -f /root/*.deb"
         sudo chroot rootfs /bin/bash -c "apt-mark hold linux-libc-dev"
+
         if [ "$OSTYPE" = "debian" ]; then
           sudo curl -o rootfs/etc/apt/trusted.gpg.d/mobian.gpg https://salsa.debian.org/Mobian-team/mobian-keyring/-/raw/master/mobian-archive-keyring.gpg
           sudo chroot rootfs /bin/bash -c "echo 'deb http://repo.mobian-project.org/ ${{ inputs.debian_version }} main non-free-firmware' > /etc/apt/sources.list.d/mobian.list"
@@ -336,8 +348,9 @@ jobs:
         sudo chroot rootfs /bin/bash -c "echo 'wifi.backend=iwd' >> /etc/NetworkManager/NetworkManger.conf"
 
         sudo sed -i 's/^#SIZE=[0-9]\+/SIZE=512/' rootfs/etc/default/zramswap
+
         sudo rm rootfs/etc/ssh/ssh_host_*
-        # sudo chroot rootfs /bin/bash -c "dpkg-reconfigure openssh-server"
+
         sudo chroot rootfs /bin/bash -c "rm -f /etc/resolv.conf"
         sudo chroot rootfs /bin/bash -c "rm -rf /var/lib/apt/lists/*"
         sudo chroot rootfs /bin/bash -c "chmod +x /usr/bin/adbd /usr/bin/gc /usr/sbin/*.sh"
@@ -346,6 +359,8 @@ jobs:
         sudo chroot rootfs /bin/bash -c "find /var/log -type f -delete"
         sudo chroot rootfs /bin/bash -c "cat /dev/null > /root/.bash_history"
         sudo rm -f rootfs/etc/machine-id
+
+        # Build Boot IMG
         export PYTHONPATH=/usr/share/android-tools/mkbootimg
         INITRD=$(sudo ls -t rootfs/boot/initrd.img-* 2>/dev/null | head -n1 || true)
         if [ -z "$INITRD" ]; then
@@ -378,10 +393,12 @@ jobs:
       id: rootfs
       if: steps.root.outputs.status == 'success' && !cancelled()
       run: |
+        # Umount Parition
         sudo umount rootfs/proc
         sudo umount rootfs/dev/pts
         sudo umount rootfs/dev
         sudo umount rootfs/sys
+
         sudo rsync -axv rootfs/* img
         if [ "${{ inputs.rootfs_type }}" = "btrfs" ]; then
           sudo chroot img /bin/bash -c "chattr +C /var/cache"
