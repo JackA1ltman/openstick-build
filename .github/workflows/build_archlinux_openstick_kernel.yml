@@ -226,7 +226,7 @@ jobs:
 
         sudo chmod -R 644 rootfs/usr/lib/firmware
 
-        sudo cp -p $GITHUB_WORKSPACE/workspace/files/system/service/* rootfs/usr/lib/systemd/system/
+        sudo cp -p $GITHUB_WORKSPACE/workspace/files/system/* rootfs/usr/lib/systemd/system/
         sudo cp -p $GITHUB_WORKSPACE/workspace/files/usr/* rootfs/usr/
 
         sudo echo "Server = $mirror" > rootfs/etc/pacman.d/mirrorlist
