@@ -83,7 +83,7 @@ jobs:
           gcc-arm-none-eabi gcc-aarch64-linux-gnu dpkg-dev kmod cpio rsync u-boot-tools \
           debhelper libelf-dev libssl-dev coreutils \
           android-sdk-libsparse-utils wget \
-          curl libdw-dev zip arch-install-scripts
+          curl libdw-dev zip arch-install-scripts libarchive-tools
           wget http://ftp.debian.org/debian/pool/main/a/android-platform-tools/mkbootimg_34.0.5-12_all.deb
           sudo dpkg -i mkbootimg_34.0.5-12_all.deb
       # 安装编译依赖项 [5,6](@ref)
