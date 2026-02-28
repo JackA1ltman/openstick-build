@@ -228,7 +228,9 @@ jobs:
 
         sudo cp -p $GITHUB_WORKSPACE/workspace/files/system/* rootfs/usr/lib/systemd/system/
         sudo mkdir -p rootfs/usr/sbin
-        sudo cp -rp $GITHUB_WORKSPACE/workspace/files/usr/* rootfs/usr/
+        sudo cp -rp $GITHUB_WORKSPACE/workspace/files/usr/bin/* rootfs/usr/bin/
+        sudo cp -rp $GITHUB_WORKSPACE/workspace/files/usr/lib/* rootfs/usr/lib/
+        sudo cp -rp $GITHUB_WORKSPACE/workspace/files/usr/sbin/* rootfs/usr/bin/
 
         sudo echo "Server = $mirror" > rootfs/etc/pacman.d/mirrorlist
         sudo echo -e '\n[archlinuxcn]' >> rootfs/etc/pacman.conf
