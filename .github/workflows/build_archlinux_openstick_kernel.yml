@@ -232,10 +232,6 @@ jobs:
         sudo cp -rp $GITHUB_WORKSPACE/workspace/files/usr/lib/* rootfs/usr/lib/
         sudo cp -rp $GITHUB_WORKSPACE/workspace/files/usr/sbin/* rootfs/usr/bin/
 
-        sudo echo "Server = $mirror" > rootfs/etc/pacman.d/mirrorlist
-        sudo echo -e '\n[archlinuxcn]' >> rootfs/etc/pacman.conf
-        sudo echo 'Server = https://repo.archlinuxcn.org/$arch' >> rootfs/etc/pacman.conf
-
         sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo 'alarm' > /etc/hostname"
         sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo 'LANG=C' > /etc/locale.conf"
         sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "echo -n > /etc/machine-id"
@@ -246,7 +242,7 @@ jobs:
 
         export PYTHONPATH=/usr/share/android-tools/mkbootimg
 
-        cp -rp "$GITHUB_WORKSPACE/modules/lib/modules" "rootfs/lib"
+        sudo cp -rp "$GITHUB_WORKSPACE/modules/lib/modules" "rootfs/lib"
         for version in $(ls "rootfs/lib/modules"); do
           sudo arch-chroot rootfs qemu-aarch64-static /bin/bash -c "depmod -av $version"
         done
